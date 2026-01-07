@@ -113,6 +113,14 @@
                 </datalist>
               </div>
 
+              <div v-else-if="h === 'Topic'">
+        <input list="list-topics" v-model="formData[h]" placeholder="Bioenergy, Conservation..." />
+        <datalist id="list-topics">
+          <option v-for="item in uniqueTopics" :key="item" :value="item" />
+        </datalist>
+        <small class="hint">Separate multiple topics with commas</small>
+      </div>
+
               <textarea v-else-if="isLongText(h)" v-model="formData[h]" rows="4"></textarea>
 
               <input v-else type="text" v-model="formData[h]" />
@@ -642,5 +650,12 @@ body {
   box-sizing: border-box;
   background: white;
   /* Ensures date/select backgrounds are white */
+}
+
+.hint {
+  display: block;
+  font-size: 0.8rem;
+  color: #718096;
+  margin-top: 4px;
 }
 </style>
