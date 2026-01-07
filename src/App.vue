@@ -18,6 +18,10 @@
         </div>
 
         <div class="dropdowns">
+          <select v-model="filters.Year">
+            <option value="">All Years</option>
+            <option v-for="y in uniqueYears" :key="y" :value="y">{{ y }}</option>
+          </select>
           <select v-model="filters.Topic">
             <option value="">All Topics</option>
             <option v-for="t in uniqueTopics" :key="t" :value="t">{{ t }}</option>
@@ -114,12 +118,12 @@
               </div>
 
               <div v-else-if="h === 'Topic'">
-        <input list="list-topics" v-model="formData[h]" placeholder="Bioenergy, Conservation..." />
-        <datalist id="list-topics">
-          <option v-for="item in uniqueTopics" :key="item" :value="item" />
-        </datalist>
-        <small class="hint">Separate multiple topics with commas</small>
-      </div>
+                <input list="list-topics" v-model="formData[h]" placeholder="Bioenergy, Conservation..." />
+                <datalist id="list-topics">
+                  <option v-for="item in uniqueTopics" :key="item" :value="item" />
+                </datalist>
+                <small class="hint">Separate multiple topics with commas</small>
+              </div>
 
               <textarea v-else-if="isLongText(h)" v-model="formData[h]" rows="4"></textarea>
 
@@ -172,10 +176,12 @@ const loading = ref(false);
 
 // Filter State
 const searchQuery = ref('');
+// --- UPDATED FILTER LOGIC ---
 const filters = reactive({
   Topic: '',
   Target: '',
-  Jurisdiction: ''
+  Jurisdiction: '',
+  Year: '' // Add Year here
 });
 
 // Admin State
@@ -208,35 +214,40 @@ function parseCSV(text) {
   const rawHeaders = lines[0].split(',').map(h => h.trim());
   headers.value = rawHeaders;
 
-  rows.value = lines.slice(1).map(line => {
-    // FIX: This regex splits by comma ONLY if followed by an even number of quotes.
-    // This allows "United States" to stay together, while still respecting "City, State" in quotes.
+  const parsedRows = lines.slice(1).map(line => {
+    // Regex splits by comma unless inside quotes
     const vals = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-
-    // Clean up quotes and whitespace
     const cleanVals = vals.map(v => v.replace(/^"|"$/g, '').trim());
 
     let obj = {};
     rawHeaders.forEach((h, i) => obj[h] = cleanVals[i] || '');
 
-    // Topics: Split by comma
-    obj.parsedTopics = obj.Topic
-      ? obj.Topic.split(',').map(t => t.trim())
-      : [];
+    // 1. Create a real Date object for sorting & filtering
+    // (Assumes CSV dates are M/D/YYYY or YYYY-MM-DD)
+    obj.dateObj = new Date(obj.Date);
+    obj.year = obj.dateObj.getFullYear(); // Extract Year for filter
 
-    // Keywords: Split by comma, limit to 3
-    obj.parsedKeywords = obj.Keywords
-      ? obj.Keywords.split(',').map(k => k.trim()).slice(0, 3)
-      : [];
+    // Parsing Arrays
+    obj.parsedTopics = obj.Topic ? obj.Topic.split(',').map(t => t.trim()) : [];
+    obj.parsedKeywords = obj.Keywords ? obj.Keywords.split(',').map(k => k.trim()).slice(0, 3) : [];
 
     return obj;
   });
 
-  // Reset form data
+  // 2. SORT BY DATE (Newest First)
+  // We sort the main list immediately so it's always ordered
+  rows.value = parsedRows.sort((a, b) => b.dateObj - a.dateObj);
+
+  // Reset form
   rawHeaders.forEach(h => formData[h] = '');
 }
 
 // --- COMPUTED PROPERTIES FOR FILTERS ---
+const uniqueYears = computed(() => {
+  // Extract years, remove NaNs (invalid dates), get unique, and sort Descending
+  const years = rows.value.map(r => r.year).filter(y => !isNaN(y));
+  return [...new Set(years)].sort((a, b) => b - a);
+});
 const uniqueTopics = computed(() => {
   const allTopics = rows.value.flatMap(r => r.parsedTopics || []);
   return [...new Set(allTopics)].sort();
@@ -246,26 +257,28 @@ const uniqueJurisdictions = computed(() => [...new Set(rows.value.map(r => r.Jur
 const uniqueAuthors = computed(() => [...new Set(rows.value.map(r => r.Author).filter(Boolean))].sort());
 
 const hasActiveFilters = computed(() => {
-  return searchQuery.value || filters.Topic || filters.Target || filters.Jurisdiction;
+  return searchQuery.value || filters.Topic || filters.Target || filters.Jurisdiction || filters.Year;
 });
 
 const filteredRows = computed(() => {
   return rows.value.filter(row => {
     const searchStr = searchQuery.value.toLowerCase();
 
-    // 1. Text Search
+    // Text Search
     const matchesSearch = !searchStr ||
       (row.Summary && row.Summary.toLowerCase().includes(searchStr)) ||
       (row.Keywords && row.Keywords.toLowerCase().includes(searchStr)) ||
       (row.Target && row.Target.toLowerCase().includes(searchStr));
 
-    // 2. Dropdown Filters
-    // --- UPDATED: Check if the array INCLUDES the selected topic ---
+    // Dropdown Filters
     const matchesTopic = !filters.Topic || (row.parsedTopics && row.parsedTopics.includes(filters.Topic));
     const matchesTarget = !filters.Target || row.Target === filters.Target;
     const matchesJurisdiction = !filters.Jurisdiction || row.Jurisdiction === filters.Jurisdiction;
 
-    return matchesSearch && matchesTopic && matchesTarget && matchesJurisdiction;
+    // Year Filter (Compare numbers)
+    const matchesYear = !filters.Year || row.year === parseInt(filters.Year);
+
+    return matchesSearch && matchesTopic && matchesTarget && matchesJurisdiction && matchesYear;
   });
 });
 
@@ -274,6 +287,7 @@ function clearFilters() {
   filters.Topic = '';
   filters.Target = '';
   filters.Jurisdiction = '';
+  filters.Year = ''; // Reset Year
 }
 
 function resolveLink(link) {
