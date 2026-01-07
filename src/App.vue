@@ -78,8 +78,9 @@
 
     <main v-else class="admin-panel">
       <div v-if="!isAuthorized" class="login-box">
-        <p>Restricted Access</p>
-        <button @click="handleLogin" class="btn-primary">Sign in with Google</button>
+        <h3>Restricted Access</h3>
+        <p>Edit <a href="https://docs.google.com/spreadsheets/d/16INZ6GIUVq8d4H6blLlQTGhQFHjRBSdHQzsrOZZXvis/edit?gid=1753934309#gid=1753934309" target="_blank">Existing Entries</a> Directly</p>
+        <button @click="handleLogin" class="btn-primary">Sign In (Add New Rows)</button>
       </div>
 
       <div v-else class="form-box">
